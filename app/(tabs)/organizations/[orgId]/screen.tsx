@@ -4,15 +4,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-   Alert,
-   GestureResponderEvent,
-   Keyboard,
-   Pressable,
-   ScrollView,
-   Text,
-   TextInput,
-   TouchableWithoutFeedback,
-   View,
+	Alert,
+	GestureResponderEvent,
+	Pressable,
+	ScrollView,
+	Text,
+	TextInput,
+	TouchableWithoutFeedback,
+	View
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import uuid from "react-native-uuid";
@@ -29,6 +28,7 @@ type InventoryItem = {
 type Organization = {
 	id: string;
 	name: string;
+	currency: string;
 	createdAt: string;
 	inventory: InventoryItem[];
 };
@@ -36,142 +36,127 @@ type Organization = {
 export default function InventoryScreen() {
 	const { orgId } = useLocalSearchParams<{ orgId: string }>();
 	const [inventory, setInventory] = useState<InventoryItem[]>([]);
-	const [toggleCreateModal, setToggleCreateModal] = useState(false);
-	const [toggleOptions, setToggleOptions] = useState(false);
 	const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
 	const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+	const [optionsVisible, setOptionsVisible] = useState(false);
 	const [optionsPosition, setOptionsPosition] = useState({ x: 0, y: 0 });
+	const [currency, setCurrency] = useState("USD");
 
-	const [newName, setNewName] = useState("");
-	const [newQuantity, setNewQuantity] = useState("");
-	const [newPrice, setNewPrice] = useState("");
-	const [newDesc, setNewDesc] = useState("");
+	const [name, setName] = useState("");
+	const [quantity, setQuantity] = useState("");
+	const [price, setPrice] = useState("");
+	const [description, setDescription] = useState("");
 	const inputRef = useRef<TextInput>(null);
 
+	// Fetch organization inventory
 	const fetchInventory = async () => {
-		const orgsStr = await AsyncStorage.getItem("organizations");
-		if (!orgsStr) return;
-
-		const orgs: Organization[] = JSON.parse(orgsStr);
-		const selectedOrg = orgs.find((org) => org.id === orgId);
-		if (!selectedOrg) return;
-
-		setInventory(selectedOrg.inventory || []);
+		const data = await AsyncStorage.getItem("organizations");
+		if (!data) return;
+		const orgs: Organization[] = JSON.parse(data);
+		const org = orgs.find((o) => o.id === orgId);
+		if (!org) return;
+		setInventory(org.inventory || []);
+		setCurrency(org.currency || "USD");
 	};
 
-	const updateStorage = async (newInventory: InventoryItem[]) => {
-		const orgsStr = await AsyncStorage.getItem("organizations");
-		if (!orgsStr) return;
-
-		const orgs: Organization[] = JSON.parse(orgsStr);
-		const updatedOrgs = orgs.map((org) =>
-			org.id === orgId ? { ...org, inventory: newInventory } : org
+	// Update AsyncStorage
+	const updateInventory = async (items: InventoryItem[]) => {
+		const data = await AsyncStorage.getItem("organizations");
+		if (!data) return;
+		const orgs: Organization[] = JSON.parse(data);
+		const updated = orgs.map((org) =>
+			org.id === orgId ? { ...org, inventory: items } : org
 		);
-		await AsyncStorage.setItem("organizations", JSON.stringify(updatedOrgs));
-		setInventory(newInventory);
+		await AsyncStorage.setItem("organizations", JSON.stringify(updated));
+		setInventory(items);
 	};
 
-	const handleCreateInventoryItem = async () => {
-		if (!orgId || newName.trim() === "" || newQuantity.trim() === "" || newPrice.trim() === "") {
-			Alert.alert("Error", "Please fill all required fields.");
+	// Handle create/update item
+	const handleSaveItem = async () => {
+		if (!name || !quantity || !price) {
+			Alert.alert("Error", "Please fill all fields.");
 			return;
 		}
-
-		const newItem: InventoryItem = {
-			id: uuid.v4().toString(),
-			name: newName,
-			quantity: parseInt(newQuantity),
-			price: parseFloat(newPrice),
-			description: newDesc,
+		const item: InventoryItem = {
+			id: editingItem?.id ?? uuid.v4().toString(),
+			name,
+			quantity: parseInt(quantity),
+			price: parseFloat(price),
+			description,
 			updatedAt: new Date().toISOString(),
 		};
 
-		const updatedInv = [...inventory, newItem];
-		await updateStorage(updatedInv);
-		setToggleCreateModal(false);
+		const updated = editingItem
+			? inventory.map((i) => (i.id === editingItem.id ? item : i))
+			: [...inventory, item];
+
+		await updateInventory(updated);
 		resetForm();
 	};
 
 	const handleDeleteItem = async () => {
 		if (!selectedItem) return;
-		const filtered = inventory.filter((item) => item.id !== selectedItem.id);
-		await updateStorage(filtered);
-		setToggleOptions(false);
+		const updated = inventory.filter((i) => i.id !== selectedItem.id);
+		await updateInventory(updated);
+		setOptionsVisible(false);
 		setSelectedItem(null);
 	};
 
-	const handleEditItem = async () => {
-		if (!editingItem || newName.trim() === "" || newQuantity.trim() === "" || newPrice.trim() === "")
-			return;
-
-		const updatedInv = inventory.map((item) =>
-			item.id === editingItem.id
-				? {
-						...item,
-						name: newName,
-						quantity: parseInt(newQuantity),
-						price: parseFloat(newPrice),
-						description: newDesc,
-						updatedAt: new Date().toISOString(),
-				  }
+	const handleQtyChange = async (id: string, delta: number) => {
+		const updated = inventory.map((item) =>
+			item.id === id
+				? { ...item, quantity: Math.max(0, item.quantity + delta) }
 				: item
 		);
-
-		await updateStorage(updatedInv);
-		setEditingItem(null);
-		resetForm();
+		await updateInventory(updated);
 	};
 
 	const resetForm = () => {
-		setNewName("");
-		setNewQuantity("");
-		setNewPrice("");
-		setNewDesc("");
+		setName("");
+		setQuantity("");
+		setPrice("");
+		setDescription("");
+		setEditingItem(null);
 	};
 
 	const handleLongPress = (e: GestureResponderEvent, item: InventoryItem) => {
-		const { pageX, pageY } = e.nativeEvent;
 		setSelectedItem(item);
-		setOptionsPosition({ x: pageX, y: pageY });
-		setToggleOptions(true);
+		setOptionsPosition({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
+		setOptionsVisible(true);
 	};
 
-	useEffect(() => {
-		fetchInventory();
-	}, []);
-
-	useEffect(() => {
-		if (toggleCreateModal || editingItem) {
-			setTimeout(() => inputRef.current?.focus(), 200);
-		}
-	}, [toggleCreateModal, editingItem]);
-
+	useEffect(() => void fetchInventory(), []);
 	useEffect(() => {
 		if (editingItem) {
-			setNewName(editingItem.name);
-			setNewQuantity(editingItem.quantity.toString());
-			setNewPrice(editingItem.price.toString());
-			setNewDesc(editingItem.description ?? "");
+			setName(editingItem.name);
+			setQuantity(editingItem.quantity.toString());
+			setPrice(editingItem.price.toString());
+			setDescription(editingItem.description || "");
 		}
+	}, [editingItem]);
+
+	useEffect(() => {
+		if (editingItem) setTimeout(() => inputRef.current?.focus(), 200);
 	}, [editingItem]);
 
 	return (
 		<SafeAreaProvider>
 			<TouchableWithoutFeedback>
 				<SafeAreaView className="flex-1 bg-neutral-900">
-					{toggleOptions && (
+					{/* Options Modal */}
+					{optionsVisible && (
 						<View
-							className="absolute bg-neutral-700 p-4 rounded-full z-30 elevation-lg shadow-sm flex flex-col gap-6"
+							className="absolute bg-neutral-700 p-4 rounded-full z-30 shadow-sm"
 							style={{
 								top: optionsPosition.y - 150,
-								left: optionsPosition.x - 175,
+								left: optionsPosition.x - 200,
 							}}
 						>
-							<View className="flex flex-row gap-4 items-center">
+							<View className="flex-row gap-4 items-center">
 								<Pressable
-									className="bg-blue-500 rounded-full active:opacity-75 px-4 py-2"
+									className="bg-blue-500 rounded-full px-4 py-2"
 									onPress={() => {
-										setToggleOptions(false);
+										setOptionsVisible(false);
 										if (selectedItem) setEditingItem(selectedItem);
 									}}
 								>
@@ -181,112 +166,123 @@ export default function InventoryScreen() {
 								<Pressable
 									className="py-2 px-4"
 									onPress={() => {
-										Keyboard.dismiss();
 										Alert.alert("Delete Item", "Are you sure?", [
 											{ text: "Cancel", style: "cancel" },
 											{ text: "Delete", style: "destructive", onPress: handleDeleteItem },
 										]);
 									}}
 								>
-									<Text className="text-white active:underline">Delete</Text>
+									<Text className="text-white">Delete</Text>
 								</Pressable>
 
 								<Pressable
-									onPress={() => setToggleOptions(false)}
-									className="p-4 rounded-full bg-neutral-800 aspect-square flex items-center justify-center overflow-visible"
+									onPress={() => setOptionsVisible(false)}
+									className="p-4 bg-neutral-800 rounded-full"
 								>
-									<FontAwesome6 name="xmark" color="#fafafa" style={{ marginBottom: -1 }} />
+									<FontAwesome6 name="xmark" color="#fafafa" />
 								</Pressable>
 							</View>
 						</View>
 					)}
 
-					{(toggleCreateModal || editingItem) && (
-						<View className="rounded-lg py-8 px-4 absolute top-1/4 left-[5%] w-[90%] bg-neutral-800 flex flex-col gap-8 z-10">
-							<View className="flex flex-col gap-4">
+					{/* Add/Edit Modal */}
+					{editingItem !== null && (
+						<View className="absolute top-1/4 left-[5%] w-[90%] bg-neutral-800 p-6 rounded-lg z-20">
+							<View className="gap-4">
 								<TextInput
 									ref={inputRef}
-									className="bg-neutral-700 placeholder:text-neutral-300 text-neutral-50 px-4 rounded-sm"
 									placeholder="Item name"
-									onChangeText={setNewName}
-									value={newName}
+									value={name}
+									onChangeText={setName}
+									className="bg-neutral-700 text-neutral-50 px-4 rounded-sm placeholder:text-neutral-50"
 								/>
 								<TextInput
-									className="bg-neutral-700 placeholder:text-neutral-300 text-neutral-50 px-4 rounded-sm"
 									placeholder="Quantity"
 									keyboardType="numeric"
-									onChangeText={setNewQuantity}
-									value={newQuantity}
+									value={quantity}
+									onChangeText={setQuantity}
+									className="bg-neutral-700 text-neutral-50 px-4 rounded-sm placeholder:text-neutral-50"
 								/>
 								<TextInput
-									className="bg-neutral-700 placeholder:text-neutral-300 text-neutral-50 px-4 rounded-sm"
 									placeholder="Price"
 									keyboardType="decimal-pad"
-									onChangeText={setNewPrice}
-									value={newPrice}
+									value={price}
+									onChangeText={setPrice}
+									className="bg-neutral-700 text-neutral-50 px-4 rounded-sm placeholder:text-neutral-50"
 								/>
 								<TextInput
-									className="bg-neutral-700 placeholder:text-neutral-300 text-neutral-50 px-4 rounded-sm"
 									placeholder="Description (optional)"
-									onChangeText={setNewDesc}
-									value={newDesc}
+									value={description}
+									onChangeText={setDescription}
+									className="bg-neutral-700 text-neutral-50 px-4 rounded-sm placeholder:text-neutral-50"
 								/>
 							</View>
-							<View className="flex flex-row justify-between gap-4">
+							<View className="flex-row justify-between mt-6">
 								<Pressable
-									onPress={editingItem ? handleEditItem : handleCreateInventoryItem}
-									className="rounded-lg bg-blue-500 px-4 py-2 active:opacity-75 self-start"
+									onPress={handleSaveItem}
+									className="bg-blue-500 px-4 py-2 rounded-lg"
 								>
-									<Text className="text-neutral-50">
-										{editingItem ? "Save Changes" : "Add Item"}
-									</Text>
+									<Text className="text-white">{editingItem ? "Save Changes" : "Add Item"}</Text>
 								</Pressable>
 								<Pressable
 									onPress={() => {
-										Keyboard.dismiss();
-										setToggleCreateModal(false);
-										setEditingItem(null);
 										resetForm();
+										setEditingItem(null);
 									}}
-									className="px-4 py-2 self-start"
+									className="px-4 py-2"
 								>
-									<Text className="text-neutral-200 active:underline">Cancel</Text>
+									<Text className="text-neutral-300 underline">Cancel</Text>
 								</Pressable>
 							</View>
 						</View>
 					)}
 
+					{/* FAB */}
 					<Pressable
 						onPress={() => {
-							setToggleCreateModal(true);
-							setEditingItem(null);
+							resetForm();
+							setEditingItem({} as InventoryItem);
 						}}
-						className="rounded-xl bg-blue-500 px-4 py-2 active:opacity-75 self-start ml-4 mt-4 aspect-square size-16 absolute bottom-8 right-8 justify-center items-center z-30 elevation-lg"
+						className="absolute bottom-8 right-8 bg-blue-500 rounded-xl p-4"
 					>
 						<FontAwesome6 name="plus" color="#fafafa" size={24} />
 					</Pressable>
 
+					{/* Inventory List */}
 					<ScrollView className="flex-1 px-4 py-6">
 						<Text className="text-neutral-50 text-xl font-bold mb-4">Inventory</Text>
 
 						{inventory.length === 0 ? (
-							<Text className="text-neutral-400">No inventory items yet...</Text>
+							<Text className="text-neutral-400">No items yet...</Text>
 						) : (
 							inventory.map((item) => (
 								<Pressable
 									key={item.id}
 									onLongPress={(e) => handleLongPress(e, item)}
-									className="bg-neutral-800 p-4 mb-4 rounded-lg shadow-md active:bg-neutral-50/10"
+									className="bg-neutral-800 p-4 mb-4 rounded-lg flex-row items-center justify-between"
 								>
-									<Text className="text-neutral-50 font-semibold">{item.name}</Text>
-									<Text className="text-neutral-300 text-sm">
-										Qty: {item.quantity} | ₱{item.price}
-									</Text>
-									{item.description && (
-										<Text className="text-neutral-400 text-xs mt-1">
-											{item.description}
-										</Text>
-									)}
+									<View className="gap-1 max-w-[90%]">
+										<Text className="text-white font-semibold">{item.name}</Text>
+										<Text className="text-neutral-300 text-sm">Price: {item.price} {currency}  /  Qty: {item.quantity}x</Text>
+										{item.description && (
+											<Text className="text-neutral-300 text-xs">Description: {item.description}</Text>
+										)}
+									</View>
+
+									<View className="flex-col">
+										<Pressable
+											onPress={() => handleQtyChange(item.id, +1)}
+											className="p-2 bg-blue-500 rounded-t"
+										>
+											<FontAwesome6 name="plus" color="#fff" />
+										</Pressable>
+										<Pressable
+											onPress={() => handleQtyChange(item.id, -1)}
+											className="p-2 bg-neutral-700 rounded-b"
+										>
+											<FontAwesome6 name="minus" color="#fff" />
+										</Pressable>
+									</View>
 								</Pressable>
 							))
 						)}
