@@ -225,26 +225,25 @@ export default function InventoryScreen() {
 							<Text className="text-neutral-400">No inventory items yet...</Text>
 						) : (
 							inventory.map((item) => (
-								<Pressable key={item.id} onLongPress={(e) => handleLongPress(e, item)} className="bg-neutral-800 p-4 mb-4 rounded-lg shadow-md active:bg-neutral-50/10 flex flex-row items-center">
-									<View className="flex flex-col flex-grow gap-2">
+								<Pressable key={item.id} onLongPress={(e) => handleLongPress(e, item)} className="bg-neutral-800 mb-4 rounded-xl shadow-md active:bg-neutral-50/10 flex flex-row items-center">
+									<View className="flex flex-col flex-grow gap-2 p-6">
 										<Text className="text-neutral-50 font-semibold">{item.name}</Text>
 										<Text className="text-neutral-300 text-sm">Price ({currency}): {item.price}  /  Qty: {item.quantity}</Text>
-										<Text className="text-neutral-300 text-xs">Description: {item.description}</Text>
+										{item.description && (
+											<Text className="text-neutral-300 text-xs max-w-xs">{item.description}</Text>
+										)}
 									</View>
-									<View className="flex flex-row gap-6 items-center z-10 elevation-sm">
-										<View className="flex flex-col gap-2">
-											<Text className="text-neutral-300 text-sm"></Text>
-										</View>
+									<View className="flex flex-row items-center z-10 elevation-sm py-6 pe-6">
 										<View className="flex flex-col z-40 elevation-xl">
 											<Pressable
 												onPress={() => handleQuantityChange(item.id, 1)}
-												className="p-2 bg-blue-500 rounded-t-sm"
+												className="p-6 bg-blue-500 rounded-t-lg active:brightness-110"
 											>
 												<FontAwesome6 name="plus" color="#fafafa" />
 											</Pressable>
 											<Pressable
 												onPress={() => handleQuantityChange(item.id, -1)}
-												className="p-2 bg-neutral-700 rounded-b-sm active:brightness-110"
+												className="p-6 bg-neutral-700 rounded-b-lg active:brightness-110"
 											>
 												<FontAwesome6 name="minus" color="#fafafa" />
 											</Pressable>
