@@ -20,7 +20,7 @@ Grab the latest build here:
 1. Clone the repo
 
    ```bash
-   git clone https://github.com/your-username/stock-knowledge.git
+   git clone https://github.com/shijisan/stock-knowledge.git
    cd stock-knowledge
    ```
 
